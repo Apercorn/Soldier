@@ -1,0 +1,48 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "type": "cargo",
+      "command": "run",
+      "args": [
+        "--bin",
+        "register_slash"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}/crates/core"
+      },
+      "problemMatcher": [
+        "$rustc"
+      ],
+      "label": "soldier: register slash commands"
+    },
+    {
+      "type": "cargo",
+      "command": "run",
+      "args": [],
+      "options": {
+        "cwd": "${workspaceFolder}/crates/core"
+      },
+      "problemMatcher": [
+        "$rustc"
+      ],
+      "group": "build",
+      "label": "soldier: start core",
+    },
+    {
+      "type": "cargo",
+      "command": "run",
+      "args": [
+        "fresh"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}/crates/migration"
+      },
+      "problemMatcher": [
+        "$rustc"
+      ],
+      "group": "build",
+      "label": "db: migrate fresh",
+    }
+  ]
+}
