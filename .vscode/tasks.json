@@ -19,7 +19,12 @@
     {
       "type": "cargo",
       "command": "run",
-      "args": [],
+      "args": [
+        "--bin",
+        "soldier-core",
+        "--package",
+        "soldier-core"
+      ],
       "options": {
         "cwd": "${workspaceFolder}/crates/core"
       },
@@ -43,6 +48,6 @@
       ],
       "group": "build",
       "label": "db: migrate fresh",
-    }
+    },
   ]
 }

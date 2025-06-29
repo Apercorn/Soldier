@@ -3,3 +3,4 @@ members = [
   "crates/core",
   "crates/migration"
 ]
+resolver = "3"

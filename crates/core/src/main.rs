@@ -2,7 +2,7 @@ use dotenv::dotenv;
 use std::env;
 
 use tracing::error;
-use tracing_subscriber;
+use tracing_subscriber::{self, EnvFilter};
 
 use poise::serenity_prelude as serenity;
 use serenity::prelude::*;
@@ -10,8 +10,10 @@ use soldier_core::{CommandResult, Context, Data, Error};
 
 use sea_orm::Database;
 
-mod commands;
-mod events;
+pub mod commands;
+pub mod events;
+pub mod utils;
+pub mod entity;
 
 #[tokio::main]
 async fn main() {
@@ -19,10 +21,9 @@ async fn main() {
 
   // Setup tracing information to the console
   tracing_subscriber::fmt()
-    .with_max_level(tracing::Level::DEBUG)
+    .with_env_filter(EnvFilter::from_default_env())
     .with_test_writer()
     .init();
-  
 
   // ====== Database ======
   let conn_string = env::var("DATABASE_URL").expect("Expected DATABASE_URL in .env");
@@ -59,7 +60,9 @@ async fn main() {
     .options(options)
     .setup(|_ctx, _ready, _framework|
       Box::pin(async move {
-        Ok(Data)
+        Ok(Data {
+          db
+        })
       })
     )
     .build();

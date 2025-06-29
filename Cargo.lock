@@ -3149,6 +3149,7 @@ version = "0.1.0"
 dependencies = [
  "dotenv",
  "migration",
+ "once_cell",
  "oxid_roblox",
  "poise",
  "reqwest 0.12.15",

@@ -3,7 +3,7 @@
 use sea_orm::entity::prelude::*;
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq)]
-#[sea_orm(table_name = "guild")]
+#[sea_orm(table_name = "clan")]
 pub struct Model {
   #[sea_orm(primary_key, auto_increment = false)]
   pub id: Uuid,
@@ -14,6 +14,7 @@ pub struct Model {
   #[sea_orm(unique)]
   pub ranker_roblox_id: i64,
   #[sea_orm(unique)]
+  /// HEY
   pub api_auth_token: Uuid,
   pub xp_enabled: bool,
   pub api_enabled: bool,
@@ -26,12 +27,35 @@ pub struct Model {
   #[sea_orm(column_type = "Text", nullable)]
   pub ranking_request_channel: Option<String>,
   #[sea_orm(column_type = "Text", nullable)]
-  pub event_display_channel: Option<String>,
-  #[sea_orm(column_type = "Text", nullable)]
-  pub event_panel_channel: Option<String>,
+  pub event_channel: Option<String>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-pub enum Relation {}
+pub enum Relation {
+  #[sea_orm(has_many = "super::clan_user::Entity")]
+  ClanUser,
+  #[sea_orm(has_many = "super::event::Entity")]
+  Event,
+  #[sea_orm(has_many = "super::role_level::Entity")]
+  RoleLevel,
+}
+
+impl Related<super::clan_user::Entity> for Entity {
+  fn to() -> RelationDef {
+    Relation::ClanUser.def()
+  }
+}
+
+impl Related<super::event::Entity> for Entity {
+  fn to() -> RelationDef {
+    Relation::Event.def()
+  }
+}
+
+impl Related<super::role_level::Entity> for Entity {
+  fn to() -> RelationDef {
+    Relation::RoleLevel.def()
+  }
+}
 
 impl ActiveModelBehavior for ActiveModel {}

@@ -3,15 +3,17 @@
 use sea_orm::entity::prelude::*;
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq)]
-#[sea_orm(table_name = "guild_user")]
+#[sea_orm(table_name = "medal")]
 pub struct Model {
   #[sea_orm(primary_key, auto_increment = false)]
   pub id: Uuid,
+  pub clan_id: Uuid,
   #[sea_orm(column_type = "Text")]
-  pub discord_id: String,
+  pub name: String,
   #[sea_orm(column_type = "Text")]
-  pub guild_id: String,
-  pub xp_level: i32,
+  pub description: String,
+  #[sea_orm(column_type = "Text")]
+  pub discord_role_id: String,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

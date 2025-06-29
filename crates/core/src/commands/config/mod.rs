@@ -2,5 +2,7 @@ use crate::{Data, Error};
 use poise::Command;
 
 pub fn commands() -> Vec<Command<Data, Error>> {
-  vec![]
+  vec![setup::setup()]
 }
+
+pub mod setup;

@@ -3,6 +3,10 @@
 pub mod prelude;
 
 pub mod account;
-pub mod guild;
-pub mod guild_user;
+pub mod clan;
+pub mod clan_user;
+pub mod event;
+pub mod medal;
+pub mod role_level;
+pub mod sea_orm_active_enums;
 pub mod user;
