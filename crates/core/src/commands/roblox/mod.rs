@@ -1,6 +1,6 @@
-use crate::{Data, Error};
+use crate::{CmdError, Data};
 use poise::Command;
 
-pub fn commands() -> Vec<Command<Data, Error>> {
+pub fn commands() -> Vec<Command<Data, CmdError>> {
   vec![]
 }

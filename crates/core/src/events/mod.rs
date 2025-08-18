@@ -1,11 +1,11 @@
-use crate::{CommandResult, Data, Error};
+use crate::{CmdError, CommandResult, Data};
+use poise::FrameworkContext;
 use poise::serenity_prelude as serenity;
-use poise::{FrameworkContext};
 
 pub async fn handle_event(
   ctx: &serenity::Context,
   event: &serenity::FullEvent,
-  _framework: FrameworkContext<'_, Data, Error>,
+  _framework: FrameworkContext<'_, Data, CmdError>,
   _data: &Data,
 ) -> CommandResult {
   match event {
