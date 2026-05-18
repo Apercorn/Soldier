@@ -4,6 +4,7 @@ pub mod events;
 #[macro_use]
 pub mod utils;
 
+pub use utils::components;
 pub use utils::embeds;
 pub use utils::emojis;
 pub use utils::error;

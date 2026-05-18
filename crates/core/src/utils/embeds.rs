@@ -41,6 +41,10 @@ pub fn timeout() -> CreateEmbed {
   self::warn("", "This prompt has timed out due to inactivity.")
 }
 
+pub fn cancelled() -> CreateEmbed {
+  self::warn("", "You cancelled the operation.")
+}
+
 pub fn not_found(item: &str, query: Option<&str>) -> CreateEmbed {
   self::error(
     format!("{item} Not Found"),
