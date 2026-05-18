@@ -2,43 +2,58 @@ use oxid_roblox::util::OxidError;
 use poise::{serenity_prelude as serenity, CreateReply, FrameworkError};
 use thiserror::Error;
 
-use crate::{embeds, helper, Data};
-
-
+use crate::{embeds, Data};
 
 #[derive(Debug, Error)]
 pub enum CmdError {
-  /// A user initiated error returned from the command, formatted in an embed.
-  /// These are custom handled and formatted to the user.
-  #[error("Command Error")]
-  Command(Result<(), serenity::Error>),
+  /// The error embed has already been sent to the user directly from within the
+  /// command body. The framework error handler does nothing for this variant.
+  ///
+  /// Pattern:
+  /// ```
+  /// response!(interaction, ctx, .embed(embeds::error(...)))?;
+  /// return Err(CmdError::Handled);
+  /// ```
+  #[error("Command error")]
+  Handled,
 
-  /// An error originating from a bad Roblox Api call.
-  /// This is an unexpected error that dumps to the bug handler.
-  #[error("{0}")]
+  /// An embed to display as the error response. Use this when the error occurs
+  /// **before any response has been sent** to the interaction. The framework
+  /// error handler will send this embed via `ctx.send()`.
+  ///
+  /// Do NOT use after `ctx.interaction.quick_modal()` or any direct
+  /// `interaction.create_response()` — at that point the token is consumed
+  /// and `ctx.send()` will fail. Use `CmdError::Handled` instead.
+  ///
+  /// Pattern:
+  /// ```
+  /// return Err(CmdError::Embed(embeds::error("Title", "Something went wrong.")));
+  /// ```
+  #[error("Command error")]
+  Embed(serenity::CreateEmbed),
+
+  /// A bad Roblox API call. Shown to the user as an unexpected error.
+  #[error("Roblox API Error: {0}")]
   Roblox(#[from] OxidError),
 
-  /// An error originating from performing an invalid action through the Discord Api.
-  /// This is an unexpected error that dumps to the bug handler.
-  #[error("Discord Error: {0}")]
+  /// An error from the Discord API.
+  #[error("Discord API Error: {0}")]
   Serenity(#[from] serenity::Error),
 
-  /// An error originating from SeaORM database operations.
+  /// A SeaORM database error.
   #[error("Database Error: {0}")]
   SeaOrm(#[from] sea_orm::DbErr),
 
-  /// An error returned when a prompt times out from inactivity
+  /// A user-facing interaction prompt timed out.
   #[error("Prompt timed out due to inactivity")]
   Timeout,
 
-  /// todo
   #[error("On cooldown: {0:?}")]
   OnCooldown(std::time::Duration),
 
   #[error("Other: {0}")]
   Other(String),
 
-  // unimplemented. not sure where i use this tbh
   #[error(transparent)]
   Anyhow(#[from] anyhow::Error),
 }
@@ -46,51 +61,52 @@ pub enum CmdError {
 pub async fn handle_error(fw_error: FrameworkError<'_, Data, CmdError>) {
   match fw_error {
     FrameworkError::Command { error, ctx, .. } => {
-      // Get the ApplicationContext struct not the Context enum
-      let app_ctx = if let poise::Context::Application(app_ctx) = ctx {
-        app_ctx
-      } else {
-        return; // We don't use prefix commands so we return
+      // Skip prefix commands (only slash commands are used)
+      let poise::Context::Application(_) = ctx else {
+        return;
       };
 
-      // Collects the result of sending the error message
-      let err_response = match &error {
-        CmdError::Command(_) => {
-          // The error message has already been sent to the user from the command
-          Ok(())
-        }
+      // Error was already shown to the user from within the command body
+      if matches!(error, CmdError::Handled) {
+        return;
+      }
 
+      let result = match error {
+        CmdError::Embed(embed) => ctx
+          .send(CreateReply::default().embed(embed).ephemeral(true))
+          .await
+          .map(|_| ()),
 
-        // these are still not 100% reliable
-        CmdError::Roblox(rblx) => {
-          ctx.send(CreateReply::default()
-            .embed(embeds::user_error(error.to_string()))
-            .ephemeral(true)
-          ).await.map(|_| ())
-        }
-
-        CmdError::Timeout => {
-          ctx.send(CreateReply::default()
-            .embed(embeds::timeout())
-            .ephemeral(true)
-          ).await.map(|_| ())
-        }
-
-        _ => {
-          ctx.send(CreateReply::default()
-            .content(error.to_string())
-            .ephemeral(true),
+        CmdError::Timeout => ctx
+          .send(
+            CreateReply::default()
+              .embed(embeds::timeout())
+              .ephemeral(true),
           )
-          .await.map(|_| ())
-        },
+          .await
+          .map(|_| ()),
+
+        CmdError::Roblox(e) => ctx
+          .send(
+            CreateReply::default()
+              .embed(embeds::user_error(e.to_string()))
+              .ephemeral(true),
+          )
+          .await
+          .map(|_| ()),
+
+        other => ctx
+          .send(
+            CreateReply::default()
+              .content(other.to_string())
+              .ephemeral(true),
+          )
+          .await
+          .map(|_| ()),
       };
 
-      if err_response.is_err() {
-        eprintln!(
-          "Error: Failed to send command error message: {:?}\n\nOriginal Error: {:?}",
-          err_response.err(),
-          error.to_string()
-        );
+      if let Err(e) = result {
+        eprintln!("Failed to send error message to user: {e:?}");
       }
     },
 

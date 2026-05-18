@@ -1,7 +1,8 @@
+use poise::serenity_prelude as serenity;
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 
-use crate::{CmdError, Context, CommandContext};
 use crate::entity::{clan as Clan, user as User};
+use crate::{CmdError, CommandContext, Context};
 
 // todo: make a bitfield permission struct which holds conditions that must be true for the command to execute
 //       otherwise it returns an error
@@ -10,8 +11,8 @@ pub async fn command_context<'a>(ctx: &'a Context<'_>) -> Result<CommandContext<
   let db = &data.db;
   let rankers = &data.rankers;
 
-  let guild_id = ctx.guild().unwrap().id.get();
-  let author_id = ctx.author().id.get();
+  let guild_id = ctx.guild().unwrap().id.to_string();
+  let author_id = ctx.author().id.to_string();
 
   let clan = Clan::Entity::find()
     .filter(Clan::Column::DiscordGuildId.eq(guild_id))
@@ -27,16 +28,12 @@ pub async fn command_context<'a>(ctx: &'a Context<'_>) -> Result<CommandContext<
     .ok()
     .flatten();
 
-  let guild = ctx.guild().unwrap();
-
-  Ok(
-    CommandContext {
-      db,
-      clan,
-      user,
-      rankers
-    }
-  )
+  Ok(CommandContext {
+    db,
+    clan,
+    user,
+    rankers,
+  })
 }
 
 /// Sends a response or followup on an interaction.
@@ -44,7 +41,7 @@ pub async fn command_context<'a>(ctx: &'a Context<'_>) -> Result<CommandContext<
 ///
 /// ## Examples
 /// ```no_run
-/// // 1. Creates a response or followup
+/// # Creates a response or followup
 /// send!(ctx,
 ///   .content("Hello!")
 ///   .ephemeral(true)
@@ -64,7 +61,7 @@ macro_rules! send {
 ///
 /// ## Examples
 /// ```no_run
-/// // 1. Create a response that sends a new message
+/// # Create a response that sends a new message
 /// response!(interaction, ctx,
 ///   .content("Hello!")
 ///   .ephemeral(true)
@@ -72,23 +69,27 @@ macro_rules! send {
 /// ```
 #[macro_export]
 macro_rules! response {
-  ($interaction:expr, $ctx:expr, $($body:tt)*) => {
-    $interaction.create_response(
+  ($interaction:expr, $ctx:expr, $($body:tt)*) => {{
+    let result = $interaction.create_response(
       &$ctx.http(),
       serenity::CreateInteractionResponse::Message(
         serenity::CreateInteractionResponseMessage::default()
           .ephemeral(true)
           $($body)*
       )
-    ).await
-  };
+    ).await;
+    if result.is_ok() {
+      $ctx.has_sent_initial_response.store(true, ::std::sync::atomic::Ordering::SeqCst);
+    }
+    result
+  }};
 }
 
 /// Performs the initial response to an interaction by updating the original message.
 ///
 /// ## Examples
 /// ```no_run
-/// // 1. Create a response that updates the original message
+/// # Create a response that updates the original message
 /// update_msg!(interaction, ctx,
 ///   .content("Hello again!")
 ///   .ephemeral(true)
@@ -114,7 +115,7 @@ macro_rules! update_msg {
 ///
 /// ## Example
 /// ```no_run
-/// // 1. Send a followup to the interaction
+/// # Send a followup to the interaction
 /// followup!(interaction, ctx,
 ///   .content("Followup message!")
 ///   .ephemeral(true)
@@ -137,153 +138,193 @@ macro_rules! followup {
 ///
 /// ## Example
 /// ```no_run
-/// // 1. Send an acklowledgement to the interaction
+/// # Send an acklowledgement to the interaction
 /// acknowledge!(interaction, ctx);
 /// ```
 #[macro_export]
 macro_rules! acknowledge {
   ($interaction:expr, $ctx:expr) => {
-    $interaction.create_response(
+    $interaction
+      .create_response(&$ctx.http(), serenity::CreateInteractionResponse::Acknowledge)
+      .await?
+  };
+}
+
+/// Responds to an `AnyInteraction` with a new ephemeral message.
+/// Equivalent to `response!` but for `AnyInteraction`.
+#[macro_export]
+macro_rules! any_response {
+  ($interaction:expr, $ctx:expr, $($body:tt)*) => {{
+    let result = $interaction.respond(
       &$ctx.http(),
-      serenity::CreateInteractionResponse::Acknowledge
+      serenity::CreateInteractionResponseMessage::default()
+        .ephemeral(true)
+        $($body)*
+    ).await;
+    if result.is_ok() {
+      $ctx.has_sent_initial_response.store(true, ::std::sync::atomic::Ordering::SeqCst);
+    }
+    result
+  }};
+}
+
+/// Updates the message for an `AnyInteraction`.
+/// For component interactions, updates the original message.
+/// For command/modal interactions, sends a new message.
+/// Clears components by default; override with `.components(vec![...])` in the body.
+/// Equivalent to `update_msg!` but for `AnyInteraction`.
+#[macro_export]
+macro_rules! any_update {
+  ($interaction:expr, $ctx:expr, $($body:tt)*) => {{
+    let result = $interaction.update_message(
+      &$ctx.http(),
+      serenity::CreateInteractionResponseMessage::default()
+        .components(vec![])
+        .ephemeral(true)
+        $($body)*
+    ).await;
+    if result.is_ok() {
+      $ctx.has_sent_initial_response.store(true, ::std::sync::atomic::Ordering::SeqCst);
+    }
+    result
+  }};
+}
+
+/// Sends a followup message to an `AnyInteraction`.
+/// Equivalent to `followup!` but for `AnyInteraction`.
+#[macro_export]
+macro_rules! any_followup {
+  ($interaction:expr, $ctx:expr, $($body:tt)*) => {
+    $interaction.followup(
+      &$ctx.http(),
+      serenity::CreateInteractionResponseFollowup::default()
+        .ephemeral(true)
+        $($body)*
     ).await?
+  };
+}
+
+/// Acknowledges an `AnyInteraction` with no visible response.
+/// Only meaningful for component interactions.
+/// Equivalent to `acknowledge!` but for `AnyInteraction`.
+#[macro_export]
+macro_rules! any_acknowledge {
+  ($interaction:expr, $ctx:expr) => {
+    $interaction.acknowledge(&$ctx.http()).await?
+  };
+}
+
+pub use crate::{
+  acknowledge, any_acknowledge, any_followup, any_response, any_update, followup, response, send,
+  update_msg,
+};
+
+/// A unified wrapper over the three Discord interaction types.
+///
+/// Avoids the need to match on `serenity::Interaction` at every call site when
+/// a function is reachable from both a slash command and a component collector.
+///
+/// ## Construction
+/// ```no_run
+/// // From a slash command context:
+/// let i = helper::AnyInteraction::Command(ctx.interaction.clone());
+///
+/// // From a component collector:
+/// let i = helper::AnyInteraction::Component(mci);
+///
+/// // From a modal submission:
+/// let i = helper::AnyInteraction::Modal(modal_res.interaction);
+///
+/// // From a raw serenity::Interaction:
+/// let i = helper::AnyInteraction::from(raw);
+/// ```
+pub enum AnyInteraction {
+  Command(serenity::CommandInteraction),
+  Component(serenity::ComponentInteraction),
+  Modal(serenity::ModalInteraction),
+}
+
+impl AnyInteraction {
+  /// Sends a new ephemeral message in response to this interaction.
+  /// Valid as the first response for any interaction type.
+  /// For component interactions this creates a *new* message rather than
+  /// updating the component's parent message — use `update_message` for that.
+  pub async fn respond(
+    &self,
+    http: impl serenity::CacheHttp,
+    msg: serenity::CreateInteractionResponseMessage,
+  ) -> serenity::Result<()> {
+    let r = serenity::CreateInteractionResponse::Message(msg);
+    match self {
+      Self::Command(i) => i.create_response(http, r).await,
+      Self::Component(i) => i.create_response(http, r).await,
+      Self::Modal(i) => i.create_response(http, r).await,
+    }
+  }
+
+  /// Updates the component's parent message for `Component` interactions,
+  /// or sends a new message for `Command` and `Modal` interactions.
+  ///
+  /// This is the method to use for functions reachable from both a slash
+  /// command and a component collector, since it does the contextually
+  /// correct thing for each interaction type.
+  ///
+  /// Pass `.components(vec![])` in `msg` if you want to clear existing buttons
+  /// or menus — this method does not do so automatically.
+  pub async fn update_message(
+    &self,
+    http: impl serenity::CacheHttp,
+    msg: serenity::CreateInteractionResponseMessage,
+  ) -> serenity::Result<()> {
+    match self {
+      Self::Component(i) => {
+        i.create_response(http, serenity::CreateInteractionResponse::UpdateMessage(msg))
+          .await
+      },
+      Self::Command(i) => {
+        i.create_response(http, serenity::CreateInteractionResponse::Message(msg))
+          .await
+      },
+      Self::Modal(i) => {
+        i.create_response(http, serenity::CreateInteractionResponse::Message(msg))
+          .await
+      },
+    }
+  }
+
+  /// Sends a followup message. The interaction must already have been responded to.
+  pub async fn followup(
+    &self,
+    http: impl serenity::CacheHttp,
+    data: serenity::CreateInteractionResponseFollowup,
+  ) -> serenity::Result<serenity::Message> {
+    match self {
+      Self::Command(i) => i.create_followup(http, data).await,
+      Self::Component(i) => i.create_followup(http, data).await,
+      Self::Modal(i) => i.create_followup(http, data).await,
+    }
+  }
+
+  /// Silently acknowledges the interaction with no visible response.
+  /// Only meaningful for `Component` interactions; other types are a no-op.
+  pub async fn acknowledge(&self, http: impl serenity::CacheHttp) -> serenity::Result<()> {
+    match self {
+      Self::Component(i) => {
+        i.create_response(http, serenity::CreateInteractionResponse::Acknowledge)
+          .await
+      },
+      _ => Ok(()),
+    }
   }
 }
 
-/// this is kinda attrocious
-#[macro_export]
-macro_rules! multi_response {
-  // Matches .embed
-  ($interaction:expr, $ctx:expr, $emb:expr, { $($variant:ident => $reply_macro:ident),+ $(,)? }) => {
-    match $interaction {
-      $(
-        serenity::Interaction::$variant(i) => $reply_macro!(i, $ctx,
-          .embed($emb)
-        ),
-      )+
-      _ => panic!("Unexpected interaction type")
+impl From<serenity::Interaction> for AnyInteraction {
+  fn from(i: serenity::Interaction) -> Self {
+    match i {
+      serenity::Interaction::Command(i) => Self::Command(i),
+      serenity::Interaction::Component(i) => Self::Component(i),
+      serenity::Interaction::Modal(i) => Self::Modal(i),
+      _ => panic!("Unsupported interaction variant for AnyInteraction"),
     }
-  };
-
-  // Matches .embed + .components
-  ($interaction:expr, $ctx:expr, $emb:expr, $comp:expr, { $($variant:ident => $reply_macro:ident),+ $(,)? }) => {
-    match $interaction {
-      $(
-        serenity::Interaction::$variant(i) => $reply_macro!(i, $ctx,
-          .embed($emb)
-          .components($comp)
-        ),
-      )+
-      _ => panic!("Unexpected interaction type")
-    }
-  };
+  }
 }
-
-
-
-// -------------------------------------
-
-// #[macro_export]
-// macro_rules! match_interaction {
-//   ($interaction:expr, $body:tt) => {
-//     match $interaction {
-//       serenity::Interaction::Command(i) => $body,
-//       serenity::Interaction::Component(i) => $body,
-//       serenity::Interaction::Modal(i) => $body,
-//       _ => Err(serenity::Error::Other("Unknown interaction variant")),
-//     }
-//   };
-// }
-
-// #[derive(Debug)]
-// pub enum ResponseType {
-//   Response,
-//   Followup,
-//   UpdateMsg,
-// }
-
-// /// Deprecated
-// /// 
-// /// ```no_run
-// /// CmdError::Embed(Handle {
-// ///   embed: embeds::not_found("User", Some(username)),
-// ///   interaction: serenity::Interaction::Modal(modal_res.interaction),
-// ///   response_type: helper::ResponseType::Response
-// /// })
-// /// ```
-// #[derive(Debug)]
-// struct Handle {
-//   pub interaction: serenity::Interaction,
-//   pub embed: serenity::CreateEmbed,
-//   pub response_type: ResponseType,
-// }
-
-// impl Handle {
-//   pub async fn respond(&self, ctx: impl serenity::CacheHttp) -> serenity::Result<()> {
-//     match self.response_type {
-//       ResponseType::Response => {
-//         match &self.interaction {
-//           serenity::Interaction::Command(i) => Ok(response!(i, ctx,
-//             .embed(self.embed.clone())
-//             .ephemeral(true)
-//           )),
-//           serenity::Interaction::Component(i) => Ok(response!(i, ctx,
-//             .embed(self.embed.clone())
-//             .ephemeral(true)
-//           )),
-//           serenity::Interaction::Modal(i) => Ok(response!(i, ctx,
-//             .embed(self.embed.clone())
-//             .ephemeral(true)
-//           )),
-//           _ => Err(serenity::Error::Other("Unknown interaction variant")),
-//         }
-//       }
-
-//       ResponseType::Followup => {
-//         match &self.interaction {
-//           serenity::Interaction::Command(i) => {
-//             followup!(i, ctx,
-//               .embed(self.embed.clone())
-//               .ephemeral(true)
-//             );
-//             Ok(())
-//           }
-//           serenity::Interaction::Component(i) => {
-//             followup!(i, ctx,
-//               .embed(self.embed.clone())
-//               .ephemeral(true)
-//             );
-//             Ok(())
-//           }
-//           serenity::Interaction::Modal(i) => {
-//             followup!(i, ctx,
-//               .embed(self.embed.clone())
-//               .ephemeral(true)
-//             );
-//             Ok(())
-//           }
-//           _ => Err(serenity::Error::Other("Unknown interaction variant")),
-//         }
-//       }
-
-//       ResponseType::UpdateMsg => {
-//         match &self.interaction {
-//           serenity::Interaction::Command(i) => Ok(update_msg!(i, ctx,
-//             .embed(self.embed.clone())
-//             .ephemeral(true)
-//           )),
-//           serenity::Interaction::Component(i) => Ok(update_msg!(i, ctx,
-//             .embed(self.embed.clone())
-//             .ephemeral(true)
-//           )),
-//           serenity::Interaction::Modal(i) => Ok(update_msg!(i, ctx,
-//             .embed(self.embed.clone())
-//             .ephemeral(true)
-//           )),
-//           _ => Err(serenity::Error::Other("Unknown interaction variant")),
-//         }
-//       }
-//     }
-//   }
-// }
-

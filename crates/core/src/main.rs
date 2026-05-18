@@ -37,10 +37,9 @@ async fn main() {
   let token = env::var("DISCORD_TOKEN").expect("Expected DISCORD_TOKEN in .env");
   let http = serenity::Http::new(&token);
 
-  let intents = GatewayIntents::GUILD_MESSAGES
-    | GatewayIntents::DIRECT_MESSAGES
-    | GatewayIntents::MESSAGE_CONTENT
-    | GatewayIntents::GUILDS;
+  let intents = serenity::GatewayIntents::GUILD_MESSAGES
+    | serenity::GatewayIntents::DIRECT_MESSAGES
+    | serenity::GatewayIntents::GUILDS;
 
   // Fetch guild count and determine appropriate shard count
   let app_info = http
