@@ -1,0 +1,8 @@
+{
+  ".*\\.rs": [
+    {
+      "label": "Simple Command",
+      "template_path": ".templates/command.template.rs"
+    }
+  ]
+}
